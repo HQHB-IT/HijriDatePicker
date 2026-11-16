@@ -378,8 +378,14 @@
     "*,*::before,*::after{box-sizing:inherit}",
     ".frame{padding:.75em}",
     ".year-row{display:flex;align-items:center;justify-content:space-between;gap:.5em}",
-    "select.year-select{font:inherit;font-weight:600;font-size:1.1em;padding:.2em .5em;border:1px solid var(--hc-border);border-radius:var(--hc-radius);background:var(--hc-bg);color:var(--hc-fg);cursor:pointer;outline:none}",
-    "select.year-select:focus{border-color:var(--hc-accent)}",
+    ".year-dd{position:relative}",
+    "button.year-btn{font-weight:600;font-size:1.1em;padding:.25em .6em;border:1px solid var(--hc-border);background:var(--hc-bg);color:var(--hc-fg);display:inline-flex;align-items:center;gap:.4em}",
+    "button.year-btn::after{content:'';border:.3em solid transparent;border-top-color:currentColor;margin-top:.3em}",
+    "ul.year-list{position:absolute;top:100%;left:0;z-index:10;margin:2px 0 0;padding:0;list-style:none;min-width:100%;max-height:calc(5 * 2em);overflow-y:auto;background:var(--hc-bg);border:1px solid var(--hc-border);border-radius:var(--hc-radius);box-shadow:var(--hc-shadow)}",
+    "ul.year-list[hidden]{display:none}",
+    "li.year-opt{height:2em;line-height:2em;padding:0 .8em;cursor:pointer;white-space:nowrap}",
+    "li.year-opt:hover{background:var(--hc-hover-bg)}",
+    "li.year-opt.current{background:var(--hc-accent);color:var(--hc-accent-fg)}",
     "button{font:inherit;color:var(--hc-accent);background:none;border:0;border-radius:var(--hc-radius);cursor:pointer;padding:.2em .45em;line-height:1}",
     "button:hover{background:var(--hc-hover-bg)}",
     "button:focus-visible{outline:2px solid var(--hc-accent);outline-offset:1px}",
@@ -400,6 +406,9 @@
     "td.today{background:var(--hc-today-bg);color:var(--hc-today-fg)}",
     "td.selected,td.selected:hover{background:var(--hc-accent);color:var(--hc-accent-fg)}",
     "td.disabled{cursor:not-allowed;opacity:.35}",
+    "td.in-range{background:var(--hc-range-bg,#d6efe3)}",
+    "td.range-start,td.range-end,td.range-start:hover,td.range-end:hover{background:var(--hc-accent);color:var(--hc-accent-fg)}",
+    "td.range-start .gregorian-date,td.range-end .gregorian-date{color:var(--hc-accent-fg)}",
     ".hijri-date{font-size:1.1em;font-weight:600;line-height:1.1;text-align:right;padding:2px}",
     ".gregorian-date{font-size:.65em;line-height:1;color:var(--hc-muted);position:absolute;bottom:2px;left:2px}",
     "td.selected .gregorian-date{color:var(--hc-accent-fg)}",
@@ -424,7 +433,8 @@
     "<style>" + STYLE + "</style>" +
     '<div class="frame" part="frame">' +
     '  <div class="year-row" part="header">' +
-    '    <select class="year-select" part="year" aria-label="Select year"></select>' +
+    '    <div class="year-dd" part="year"><button type="button" class="year-btn" part="button year-button" data-action="year-toggle" aria-haspopup="listbox" aria-label="Select year"></button>' +
+    '<ul class="year-list" part="year-list" role="listbox" hidden></ul></div>' +
     '    <button type="button" class="today" part="button today" data-action="today">Today</button>' +
     '  </div>' +
     '  <div class="month-row" part="month-row">' +
@@ -450,13 +460,16 @@
       self._view = new GregorianCalendar(now.getFullYear(), now.getMonth(), false);
       
       self._selected = null;
+      self._rangeStart = null;
+      self._rangeEnd = null;
       self._miqaats = [];
       self._target = null;
       self._targetHijri = null;
       self._connected = false;
 
       self._els = {
-        yearSelect: root.querySelector(".year-select"),
+        yearBtn: root.querySelector(".year-btn"),
+        yearList: root.querySelector(".year-list"),
         month: root.querySelector(".month"),
         range: root.querySelector(".greg-range"),
         table: root.querySelector("table"),
@@ -466,7 +479,6 @@
       };
 
       self._onRootClick = self._onRootClick.bind(self);
-      self._onYearChange = self._onYearChange.bind(self);
       self._onGridKeydown = self._onGridKeydown.bind(self);
       self._onTargetFocus = self._onTargetFocus.bind(self);
       self._onTargetChange = self._onTargetChange.bind(self);
@@ -481,7 +493,7 @@
 
     Object.defineProperty(HijriCalendarElement, "observedAttributes", {
       get: function () {
-        return ["target", "target-hijri", "value", "week-start", "numerals", "min", "max", "miqaats-url", "popup", "format", "hijri-format", "max-badges", "hide-miqaats", "theme", "base"];
+        return ["target", "target-hijri", "value", "week-start", "numerals", "min", "max", "miqaats-url", "popup", "format", "hijri-format", "max-badges", "hide-miqaats", "theme", "base", "range", "range-separator"];
       }
     });
 
@@ -492,7 +504,6 @@
       this._updateBaseMode();
       this._populateYearDropdown();
       this._root.addEventListener("click", this._onRootClick);
-      this._els.yearSelect.addEventListener("change", this._onYearChange);
       this._els.table.addEventListener("keydown", this._onGridKeydown);
       this._bindTargets();
 
@@ -513,7 +524,6 @@
     P.disconnectedCallback = function () {
       this._connected = false;
       this._root.removeEventListener("click", this._onRootClick);
-      this._els.yearSelect.removeEventListener("change", this._onYearChange);
       this._els.table.removeEventListener("keydown", this._onGridKeydown);
       this._unbindTargets();
       this._teardownPopupListeners();
@@ -532,6 +542,9 @@
         if (newVal) this._loadMiqaats(newVal); else this.miqaats = [];
       } else if (name === "popup" && newVal === null) {
         this.close();
+      } else if (name === "range" && newVal === null) {
+        this._rangeStart = this._rangeEnd = null;
+        this._render();
       } else {
         this._render();
       }
@@ -559,9 +572,10 @@
 
       for (var y = startY; y <= endY; y++) {
         var label = (this._isGregorianBase || !arabic) ? (y + (this._isGregorianBase ? "" : "H")) : (toArabicNumerals(y) + "H");
-        html += '<option value="' + y + '"' + (y === currentYear ? ' selected' : '') + '>' + label + '</option>';
+        html += '<li class="year-opt' + (y === currentYear ? ' current' : '') + '" role="option" data-year="' + y + '">' + label + '</li>';
       }
-      this._els.yearSelect.innerHTML = html;
+      this._els.yearList.innerHTML = html;
+      this._syncYear();
     };
 
     Object.defineProperties(P, {
@@ -583,6 +597,15 @@
         set: function (v) { this._select(v ? validHijri(v.year, v.month, v.date) : null, { write: true, emit: false }); }
       },
       selected: { get: function () { return this._selected ? this._detail(this._selected) : null; } },
+      rangeValue: {
+        get: function () { return this._rangeDetail(); },
+        set: function (v) {
+          var a = v ? parseValue(v.start, false) : null, b = v ? parseValue(v.end, false) : null;
+          if (a && b && b.ajd < a.ajd) { var t = a; a = b; b = t; }
+          this._rangeStart = a || null; this._rangeEnd = (a && b) ? b : null;
+          this._render();
+        }
+      },
       miqaats: {
         get: function () { return this._miqaats; },
         set: function (list) { this._miqaats = Array.isArray(list) ? list : []; if (this._connected) this._render(); }
@@ -623,11 +646,65 @@
       } else {
         this._view = new HijriCalendar(Math.min(MAX_YEAR, Math.max(MIN_YEAR, year | 0)), Math.min(11, Math.max(0, month | 0)), this.getAttribute("week-start") === "monday");
       }
-      this._els.yearSelect.value = this._view.getYear();
+      this._syncYear();
       this._render();
     };
 
-    P.clear = function () { this._select(null, { write: true, emit: true }); };
+    P.clear = function () {
+      this._rangeStart = this._rangeEnd = null;
+      this._select(null, { write: true, emit: true });
+      if (this.hasAttribute("range")) fire(this, "hijri-range-change", null);
+    };
+
+    /* Range selection: 1st pick = start, 2nd = end (swapped if earlier), 3rd restarts.
+       Returns true when a complete range was just chosen. */
+    P._pickRange = function (day) {
+      if (!day) return false;
+      var complete = false;
+      if (!this._rangeStart || this._rangeEnd) {
+        this._rangeStart = day; this._rangeEnd = null;
+      } else if (day.ajd < this._rangeStart.ajd) {
+        this._rangeEnd = this._rangeStart; this._rangeStart = day; complete = true;
+      } else {
+        this._rangeEnd = day; complete = true;
+      }
+      this._selected = day;
+      this._render();
+      if (complete) {
+        this._writeRangeTargets();
+        fire(this, "hijri-range-change", this._rangeDetail());
+      }
+      return complete;
+    };
+
+    P._writeRangeTargets = function () {
+      var sep = this.getAttribute("range-separator") || " – ";
+      var s = this._rangeStart, e = this._rangeEnd;
+      if (!s || !e) return;
+      if (this._target) {
+        var f = this.getAttribute("format") || "iso";
+        setNativeValue(this._target, formatDay(s, f) + sep + formatDay(e, f));
+        this._target.setAttribute("data-start-iso", formatDay(s, "iso"));
+        this._target.setAttribute("data-end-iso", formatDay(e, "iso"));
+        fire(this._target, "input", {});
+        fire(this._target, "change", {});
+      }
+      if (this._targetHijri) {
+        var hf = this.getAttribute("hijri-format") || "hijri";
+        setNativeValue(this._targetHijri, formatDay(s, hf) + sep + formatDay(e, hf));
+        fire(this._targetHijri, "input", {});
+        fire(this._targetHijri, "change", {});
+      }
+    };
+
+    P._rangeDetail = function () {
+      if (!this._rangeStart || !this._rangeEnd) return null;
+      return {
+        start: this._detail(this._rangeStart),
+        end: this._detail(this._rangeEnd),
+        days: Math.round(this._rangeEnd.ajd - this._rangeStart.ajd) + 1
+      };
+    };
     P.format = function (val, template) {
       var day = parseValue(val, true);
       return day ? formatDay(day, template || this.getAttribute("format") || "iso") : "";
@@ -637,7 +714,7 @@
       if (!this._connected) return;
       var arabic = this.getAttribute("numerals") !== "latin";
 
-      this._els.yearSelect.value = this._view.getYear();
+      this._syncYear();
 
       if (this._isGregorianBase) {
         var gYear = this._view.getYear(), gMonth = this._view.getMonth();
@@ -678,7 +755,14 @@
           var cls = ["day"];
           if (day.filler) cls.push("filler");
           if (isToday) cls.push("today");
-          if (isSelected) cls.push("selected");
+          if (this.hasAttribute("range")) {
+            if (this._rangeStart) {
+              var rs = this._rangeStart.ajd, re = this._rangeEnd ? this._rangeEnd.ajd : rs;
+              if (sameDay(day, this._rangeStart)) cls.push("range-start");
+              else if (this._rangeEnd && sameDay(day, this._rangeEnd)) cls.push("range-end");
+              else if (day.ajd > rs && day.ajd < re) cls.push("in-range");
+            }
+          } else if (isSelected) cls.push("selected");
           if (isDisabled) cls.push("disabled");
 
           var primaryNum = this._isGregorianBase ? day.gregorian.date : (arabic ? toArabicNumerals(day.hijri.date) : day.hijri.date);
@@ -732,24 +816,53 @@
       container.removeAttribute("hidden");
     };
 
-    P._onYearChange = function (e) {
-      var newYear = parseInt(e.target.value, 10);
-      this.goTo(newYear, this._view.getMonth());
+    P._syncYear = function () {
+      var y = this._view.getYear(), cur = null, opts = this._els.yearList.children;
+      for (var i = 0; i < opts.length; i++) {
+        var on = +opts[i].getAttribute("data-year") === y;
+        opts[i].classList.toggle("current", on);
+        if (on) cur = opts[i];
+      }
+      this._els.yearBtn.textContent = cur ? cur.textContent : String(y);
+    };
+
+    P._toggleYearList = function (open) {
+      var list = this._els.yearList;
+      if (open === undefined) open = list.hasAttribute("hidden");
+      if (open) {
+        list.removeAttribute("hidden");
+        var cur = list.querySelector(".current");
+        if (cur) list.scrollTop = cur.offsetTop - 2 * cur.offsetHeight; // current year sits in the middle of the 5 shown
+      } else {
+        list.setAttribute("hidden", "");
+      }
     };
 
     P._onRootClick = function (e) {
+      var yo = e.target.closest && e.target.closest("li.year-opt");
+      if (yo) {
+        this._toggleYearList(false);
+        this.goTo(parseInt(yo.getAttribute("data-year"), 10), this._view.getMonth());
+        return;
+      }
+      if (!(e.target.closest && e.target.closest(".year-dd"))) this._toggleYearList(false);
       var btn = e.target.closest("button");
       if (btn) {
         var action = btn.getAttribute("data-action");
         if (action === "prev-month") { var prev = this._view.previousMonth(); this.goTo(prev.getYear(), prev.getMonth()); }
         if (action === "next-month") { var nxt = this._view.nextMonth(); this.goTo(nxt.getYear(), nxt.getMonth()); }
         if (action === "today") this.goToToday();
+        if (action === "year-toggle") this._toggleYearList();
         return;
       }
       var td = e.target.closest("td.day");
       if (td && !td.classList.contains("disabled")) {
         var ajd = parseFloat(td.getAttribute("data-ajd"));
         var day = dayHash(HijriDate.fromAJD(ajd), false);
+        if (this.hasAttribute("range")) {
+          if (this._pickRange(day) && this.hasAttribute("popup")) this.close();
+          return;
+        }
         this._select(day, { write: true, emit: true });
         if (this.hasAttribute("popup")) this.close();
       }
@@ -762,7 +875,12 @@
       else if (e.key === "ArrowRight") nextAjd += 1;
       else if (e.key === "ArrowUp") nextAjd -= 7;
       else if (e.key === "ArrowDown") nextAjd += 7;
-      else if (e.key === "Enter" || e.key === " ") { e.preventDefault(); if (this.hasAttribute("popup")) this.close(); return; }
+      else if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        if (this.hasAttribute("range")) { if (this._pickRange(this._selected) && this.hasAttribute("popup")) this.close(); return; }
+        if (this.hasAttribute("popup")) this.close();
+        return;
+      }
       else if (e.key === "Escape") { this.close(); if (this._target) this._target.focus(); return; }
       else return;
 

@@ -39,6 +39,8 @@ file:// open also works except for loading `miqaats.json`).
 | `hijri-format`  | `hijri`    | Same, for `target-hijri`. |
 | `value`         | –          | Initial selection: `2026-10-20` (Gregorian), `1448-05-10H` (Hijri, 1-based month) or `10 Jumada al-Ula 1448H`. If omitted, an existing value in `target` is parsed instead. |
 | `min` / `max`   | –          | Earliest / latest selectable day, same syntaxes as `value`. Days outside are greyed out and refused. |
+| `range`         | off        | Date-range mode: first click picks the start, second the end (swapped if earlier), a third restarts. `target` receives `start – end`; read `el.rangeValue` (`{start,end,days}`; the setter takes `{start,end}` as Dates or ISO strings, Hijri with an `H` suffix) or listen to `hijri-range-change`. |
+| `range-separator` | ` – `    | Text placed between the two dates written to `target` / `target-hijri`. |
 | `week-start`    | `sunday`   | `monday` starts rows on Monday (ISO 8601). |
 | `numerals`      | `arabic`   | `latin` shows the big Hijri day number as `12` instead of `١٢`. |
 | `miqaats-url`   | –          | URL of a JSON file in the `miqaats.json` shape. Enables the in-cell miqaat badges and the list under the grid (see "Miqaat badges"). |
@@ -83,6 +85,7 @@ Events bubble and cross the shadow boundary (`composed`), so `document.addEventL
 | Event                   | `detail` |
 | ----------------------- | -------- |
 | `hijri-change`          | `{ hijri:{year,month,date,monthName}, gregorian: Date, iso, hijriIso, hijriText, gregorianText, value, ajd, miqaats:[…] }` or `null` when cleared |
+| `hijri-range-change`    | `{ start, end, days }` (each a `hijri-change`-style detail) when a range is completed, `null` when cleared |
 | `hijri-navigate`        | `{ year, month, monthName }` whenever the visible month changes |
 | `hijri-open` / `hijri-close` | popup opened / closed |
 | `hijri-miqaats-loaded`  | `{ count }` |
