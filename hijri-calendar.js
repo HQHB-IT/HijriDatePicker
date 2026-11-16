@@ -35,7 +35,23 @@
     "July", "August", "September", "October", "November", "December"
   ];
 
-  var WEEKDAYS_SUN = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  var HIJRI_MONTHS_LONG_AR = [
+    "المحرم الحرام", "صفر المظفر", "ربيع الأول", "ربيع الآخر",
+    "جمادى الأولى", "جمادى الآخرة", "رجب الأصب", "شعبان الكريم",
+    "رمضان المعظم", "شوال المكرم", "ذو القعدة الحرام", "ذو الحجة الحرام"
+  ];
+
+  var HIJRI_MONTHS_SHORT_AR = [
+    "المحرم", "صفر", "ربيع الأول", "ربيع الآخر", "جمادى الأولى", "جمادى الآخرة",
+    "رجب", "شعبان", "رمضان", "شوال", "ذو القعدة", "ذو الحجة"
+  ];
+
+  var GREG_MONTHS_AR = [
+    "يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو",
+    "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"
+  ];
+
+  var WEEKDAYS_SUN =["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   var WEEKDAYS_MON = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
   var ARABIC_DIGITS = ["٠", "١", "٢", "٣", "٤", "٥", "٦", "٧", "٨", "٩"];
 
@@ -871,6 +887,55 @@
     HijriCalendarElement.parse = function (str) { var d = parseValue(str, true); return d ? { iso: formatDay(d, "iso"), hijri: formatDay(d, "hijri"), ajd: d.ajd } : null; };
     HijriCalendarElement.toHijri = function (date) { var hd = HijriDate.fromGregorian(date); return new HijriDate(hd.getYear(), hd.getMonth(), hd.getDate()); };
     HijriCalendarElement.toGregorian = function (y, m, d) { return new HijriDate(y, m, d).toGregorian(); };
+    /**
+     * Month list only.
+     * @param {string} calendar "hijri" (default) | "gregorian"
+     * @param {string} lang     "en" (default) | "ar"
+     * @param {string} style    "long" (default) | "short"
+     * @returns {Array<{value:number,name:string}>} value is the 0-based month index
+     */
+    HijriCalendarElement.getMonthList = function (calendar, lang, style) {
+      var greg = calendar === "gregorian", ar = lang === "ar", short = style === "short", names;
+      if (greg) {
+        names = ar ? GREG_MONTHS_AR : GREG_MONTHS;
+        if (short && !ar) names = names.map(function (n) { return n.substr(0, 3); });
+      } else if (ar) {
+        names = short ? HIJRI_MONTHS_SHORT_AR : HIJRI_MONTHS_LONG_AR;
+      } else {
+        names = short ? HIJRI_MONTHS_SHORT : HIJRI_MONTHS_LONG;
+      }
+      return names.map(function (n, i) { return { value: i, name: n }; });
+    };
+
+    /**
+     * Year list only.
+     * @param {string} calendar "hijri" (default) | "gregorian"
+     * @param {string} lang     "en" (default) | "ar" (Arabic-Indic digits, Hijri gets "هـ")
+     * @param {number} [start]  default 1400 (hijri) / 2000 (gregorian)
+     * @param {number} [end]    default 1500 (hijri) / 2050 (gregorian)
+     * @returns {Array<{value:number,name:string}>}
+     */
+    HijriCalendarElement.getYearList = function (calendar, lang, start, end) {
+      var greg = calendar === "gregorian", ar = lang === "ar";
+      var s = start != null ? start : (greg ? 2000 : 1400);
+      var e = end != null ? end : (greg ? 2050 : 1500);
+      var out = [];
+      for (var y = s; y <= e; y++) {
+        var n = ar ? toArabicNumerals(y) : String(y);
+        out.push({ value: y, name: greg ? n : (ar ? n + " هـ" : n + "H") });
+      }
+      return out;
+    };
+
+    HijriCalendarElement.getHijriMonthsEn = function (style) { return HijriCalendarElement.getMonthList("hijri", "en", style); };
+    HijriCalendarElement.getHijriMonthsAr = function (style) { return HijriCalendarElement.getMonthList("hijri", "ar", style); };
+    HijriCalendarElement.getGregorianMonthsEn = function (style) { return HijriCalendarElement.getMonthList("gregorian", "en", style); };
+    HijriCalendarElement.getGregorianMonthsAr = function (style) { return HijriCalendarElement.getMonthList("gregorian", "ar", style); };
+    HijriCalendarElement.getHijriYearsEn = function (s, e) { return HijriCalendarElement.getYearList("hijri", "en", s, e); };
+    HijriCalendarElement.getHijriYearsAr = function (s, e) { return HijriCalendarElement.getYearList("hijri", "ar", s, e); };
+    HijriCalendarElement.getGregorianYearsEn = function (s, e) { return HijriCalendarElement.getYearList("gregorian", "en", s, e); };
+    HijriCalendarElement.getGregorianYearsAr = function (s, e) { return HijriCalendarElement.getYearList("gregorian", "ar", s, e); };
+
     HijriCalendarElement.HijriDate = HijriDate;
     HijriCalendarElement.GregorianCalendar = GregorianCalendar;
     HijriCalendarElement.HijriCalendar = HijriCalendar;
